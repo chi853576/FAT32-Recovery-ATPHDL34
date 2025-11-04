@@ -1,0 +1,1 @@
+f420969c92f5f9898040398c1f541063  /mnt/fat32_test/sample_test.txt

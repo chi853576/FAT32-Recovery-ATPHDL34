@@ -53,3 +53,9 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Ignore all image files
+*.img
+
+# But keep the official base image (clean FAT32 sample)
+!base_images/fat32_base.img
