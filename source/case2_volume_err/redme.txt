@@ -3,6 +3,8 @@ Bước 1:
 Tạo test_volum_err copy từ file fat32_base.img để sửa đĩa vào test, không can thiệp vào gốc.
 Bước 2: cài mt gcc rồi kt gcc --version
 Bước 3: biên dịch chương trình: gcc fat32_recovery_case2.c -o recover_volume_br
+
+TH1: Làm hỏng 16 byte đầu của sector 0 → BR chính hỏng. Bản sao (thường ở sector 6) vẫn còn nguyên, chương trình có thể tìm thấy.
 Bước 4: Mở powershell và gõ lệnh để sửa lại ổ đĩa.
 
 PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> $fs = [System.IO.File]::OpenWrite("D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images\test_volume_err.img")
@@ -39,3 +41,25 @@ PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> Get-Content "D:\ATPHDL34\FAT
 00000010   02 00 00 00 00 F8 00 00 20 00 08 00 00 00 00 00  .....ø.. .......
 00000020   00 20 03 00 28 06 00 00 00 00 00 00 02 00 00 00  . ..(...........
 00000030   01 00 06 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+
+
+
+
+TH2: BR chính và bản sao đều hỏng
+Mục đích: kiểm tra xem chương trình có tái tạo BR mới từ thông số mặc định hay không.
+Bước 4: Mở powershell và gõ lệnh:
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> $fs = [System.IO.File]::OpenWrite("D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images\test_volume_err.img")
+
+# Làm hỏng BR chính (sector 0)
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> $fs.Seek(0, [System.IO.SeekOrigin]::Begin)
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> for ($i=0; $i -lt 512; $i++) { $fs.WriteByte(0x00) }
+
+# Làm hỏng luôn bản sao BR (sector 6)
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> $fs.Seek(6 * 512, [System.IO.SeekOrigin]::Begin)
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> for ($i=0; $i -lt 512; $i++) { $fs.WriteByte(0x00) }
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> $fs.Close()
+
+Bước 5: Như trên
+
+
+
