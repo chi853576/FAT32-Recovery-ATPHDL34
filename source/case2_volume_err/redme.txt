@@ -1,0 +1,41 @@
+----------------------------------case2---------------------------
+Bước 1: 
+Tạo test_volum_err copy từ file fat32_base.img để sửa đĩa vào test, không can thiệp vào gốc.
+Bước 2: cài mt gcc rồi kt gcc --version
+Bước 3: biên dịch chương trình: gcc fat32_recovery_case2.c -o recover_volume_br
+Bước 4: Mở powershell và gõ lệnh để sửa lại ổ đĩa.
+
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> $fs = [System.IO.File]::OpenWrite("D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images\test_volume_err.img")
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> $fs.Seek(0, [System.IO.SeekOrigin]::Begin)
+0
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> for ($i=0; $i -lt 16; $i++) { $fs.WriteByte(0x00) }
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> $fs.Close()
+
+
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> Get-Content "D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images\test_volume_err.img" -Encoding Byte -TotalCount 32 | Format-Hex
+
+           00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+
+00000000   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+00000010   02 00 00 00 00 F8 00 00 20 00 08 00 00 00 00 00  .....ø.. .......
+
+Gõ lệnh trên và output hiện ra như này cho thấy 16 byte đầu tiên là 0x00 (sector 0 đã bị phá), tức BR thực sự đã hỏng
+
+Bước 5: Khôi phục volum ổ đĩa
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> & "D:\ATPHDL34\FAT32-Recovery-ATPHDL34\source\case2_volume_err\recover_volume_br.exe" "D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images\test_volume_err.img"
+[*] Searching for backup Boot Record in first 2048 sectors...
+[+] Possible valid BR found at sector 6
+[Ô£ô] Recovered main Boot Record from backup sector 6 successfully.
+
+Kiểm tra ổ đĩa đã khôi phục chưa
+PS D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images> Get-Content "D:\ATPHDL34\FAT32-Recovery-ATPHDL34\base_images\test_volume_err.img" -Encoding Byte -TotalCount 64 | Format-Hex
+
+
+           Path:
+
+           00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+
+00000000   EB 58 90 6D 6B 66 73 2E 66 61 74 00 02 01 20 00  ëXmkfs.fat... .
+00000010   02 00 00 00 00 F8 00 00 20 00 08 00 00 00 00 00  .....ø.. .......
+00000020   00 20 03 00 28 06 00 00 00 00 00 00 02 00 00 00  . ..(...........
+00000030   01 00 06 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
