@@ -1,14 +1,14 @@
-Hướng dẫn cách chạy demo cho trường hợp 3.
-Cách 1: Tải file ổ đĩa `case3_dir_cluster_err.img` và `file fat32_recovery_case3.c` xuống máy (lưu ý để cùng 1 thư mục)
-        Sau đó dùng vscode, truy cập vào `file fat32_recovery_case3.c` và nhấn Run Code (hoặc `Ctrl + Alt + N`)
+# Hướng dẫn cách chạy demo cho trường hợp 3.
+
+## Cách 1: Tải file ổ đĩa `case3_dir_cluster_err.img` và `file fat32_recovery_case3.c` xuống máy (lưu ý để cùng 1 thư mục)
+Sau đó dùng vscode, truy cập vào `file fat32_recovery_case3.c` và nhấn Run Code (hoặc `Ctrl + Alt + N`)
 
 
-Cách 2: Tự tạo 1 ổ đĩa lỗi
+## Cách 2: Tự tạo 1 ổ đĩa lỗi
 
 Các bước thực hiện như sau:
 
-B1: Sử dụng WSL, di chuyển tới thư mục bạn muốn lưu trữ (giả sử là `cd /mnt/d/NAM_4/DataRecovery_and_Safety/Seminar
-`), tạo một file trống 10MB để làm ổ đĩa ảo
+B1: Sử dụng WSL, di chuyển tới thư mục bạn muốn lưu trữ (giả sử là `cd /mnt/d/NAM_4/DataRecovery_and_Safety/Seminar`), tạo một file trống 10MB để làm ổ đĩa ảo
     `dd if=/dev/zero of=fat32_base.img bs=1M count=10`
     
 B2: Định dạng FAT32
