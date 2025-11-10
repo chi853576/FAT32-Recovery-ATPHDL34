@@ -1,0 +1,3 @@
+Vị trí của FAT1: 4000 (hệ 16)
+Vị trí của FAT2: 17C00
+Vị trí của RDET: 2B800
