@@ -2,7 +2,8 @@
 // Phiên bản: Root Access Version + Custom Mount Point + Unmount Option
 // Cách chạy:
 // 1. gcc fat32_recovery_case1.c -o recovery_tool
-// 2. sudo ./recovery_tool ../../base_images/case1_err_A.img  <-- QUAN TRONG: Phai chay bang sudo
+// 2. sudo ./recovery_tool ../../base_images/fat32_partition_errA.img  <-- QUAN TRỌNG: Phải chạy bằng sudo
+// 3. Thuc hien cac chuc nang theo menu
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -4,7 +4,7 @@
 # CẤU HÌNH (Nhận tham số từ dòng lệnh)
 # =================================================================
 # Tham số 1: Tên file ảnh (Ví dụ: disk.img)
-IMG_FILENAME="${1:-fat32_clean.img}"
+IMG_FILENAME="${1:-fat32_partition_err.img}"
 
 # Tham số 2: Dung lượng MB (Mặc định: 50)
 IMG_SIZE_MB="${2:-50}"

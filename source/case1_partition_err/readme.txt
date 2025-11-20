@@ -10,8 +10,8 @@
 - Chương trình:
     fat32_recovery_case1.c (thực hiện khôi phục dữ liệu)
     create_image.sh (tạo file ảnh)
-    run_scenario_1.sh (chương trình chạy tự động TH. phục hồi từ bản sao)
-    run_scenario_1.sh (chương trình chạy tự động TH. tái tạo từ boot record)
+    run_scenario1.sh (chương trình chạy tự động TH. phục hồi từ bản sao)
+    run_scenario2.sh (chương trình chạy tự động TH. tái tạo từ boot record)
 
 --------------------------------------------------------
                     HƯỚNG DẪN SỬ DỤNG
@@ -41,23 +41,23 @@ Bước 3: Tạo file ảnh và copy dữ liệu:
     ```
 
 Bước 4: Copy file ảnh thành 2 file ảnh để test 2 trường hợp
-    - Phục hồi từ bản sao (A): fat32_partition_err_A.img
-    - Tái tại từ Boot Record (B): fat32_partition_err_B.img
+    - Phục hồi từ bản sao (A): fat32_partition_errA.img
+    - Tái tại từ Boot Record (B): fat32_partition_errB.img
 
     ```bash
-    cp ../../base_images/fat32_partition_err.img ../../base_images/fat32_partition_err_A.img
-    cp ../../base_images/fat32_partition_err.img ../../base_images/fat32_partition_err_B.img
+    cp ../../base_images/fat32_partition_err.img ../../base_images/fat32_partition_errA.img
+    cp ../../base_images/fat32_partition_err.img ../../base_images/fat32_partition_errB.img
     ```
 
 Bước 5: Chạy chương trình
     - Trường hợp Phục hồi từ bản sao (A)
     ```bash
-    sudo ./recovery_tool.exe ../../base_images/fat32_partition_err_A.img
+    sudo ./recovery_tool.exe ../../base_images/fat32_partition_errA.img
     ```
 
     - Trường hợp Phục hồi từ bản sao (B)
     ```bash
-    sudo ./recovery_tool.exe ../../base_images/fat32_partition_err_B.img
+    sudo ./recovery_tool.exe ../../base_images/fat32_partition_errB.img
     ```
     --------------------------------------------------------
     Chọn các option:
@@ -111,7 +111,7 @@ TƯƠNG TỰ CÁC BƯỚC 1, 2, 3, 4 phía trên
     - Kịch bản test: Chọn option 1 -> 2 -> 3 -> 4 -> 5 -> 0
     - Chạy:
         ```bash
-        ./run_scenario_1.sh ../../base_images/fat32_partition_err_A.img
+        ./run_scenario1.sh ../../base_images/fat32_partition_errA.img
         ```
 
 * B - Tái tạo từ Boot Record (BR):
@@ -119,5 +119,5 @@ TƯƠNG TỰ CÁC BƯỚC 1, 2, 3, 4 phía trên
     - Kịch bản test: Chọn option 1 -> 3 -> 4 -> 5 -> 0
     - Chạy:
         ```bash
-        ./run_scenario_2.sh ../../base_images/fat32_partition_err_B.img
+        ./run_scenario2.sh ../../base_images/fat32_partition_errB.img
         ```
