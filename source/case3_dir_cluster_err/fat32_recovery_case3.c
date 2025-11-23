@@ -5,6 +5,8 @@
 #include <wchar.h>
 #include <locale.h>
 #include <stddef.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 typedef struct
 {
@@ -74,86 +76,55 @@ void print_short_name(uint8_t *name, char *out)
 
 int read_lfn(uint8_t *buffer, int start_idx, int entries_per_cluster, char *long_name)
 {
-    wchar_t wname[256] = {0};
+    wchar_t wname[256];
     int wpos = 0;
     int found_lfn = 0;
+    memset(wname, 0, sizeof(wname));
 
     for (int i = start_idx; i >= 0 && wpos < 250; i--)
     {
+        // nếu không phải LFN entry thì dừng
         if (buffer[i * 32 + 11] != 0x0F)
             break;
-        LfnEntry temp;
-        LfnEntry *lfn = &temp;
+
         uint8_t *p = buffer + i * 32;
-        lfn->order = p[0];
+        uint8_t order = p[0];
+        uint16_t name1[5];
+        uint16_t name2[6];
+        uint16_t name3[2];
+
         for (int k = 0; k < 5; k++)
-            lfn->name1[k] = (uint16_t)(p[1 + k * 2] | ((uint16_t)p[2 + k * 2] << 8));
-        lfn->attr = p[11];
-        lfn->type = p[12];
-        lfn->checksum = p[13];
-
+            name1[k] = (uint16_t)(p[1 + k * 2] | ((uint16_t)p[2 + k * 2] << 8));
         for (int k = 0; k < 6; k++)
-            lfn->name2[k] = (uint16_t)(p[14 + k * 2] | ((uint16_t)p[15 + k * 2] << 8));
-        lfn->zero = (uint16_t)(p[26] | ((uint16_t)p[27] << 8));
+            name2[k] = (uint16_t)(p[14 + k * 2] | ((uint16_t)p[15 + k * 2] << 8));
         for (int k = 0; k < 2; k++)
-            lfn->name3[k] = (uint16_t)(p[28 + k * 2] | ((uint16_t)p[29 + k * 2] << 8));
-        // LfnEntry *lfn = (LfnEntry *)(buffer + i * 32);
+            name3[k] = (uint16_t)(p[28 + k * 2] | ((uint16_t)p[29 + k * 2] << 8));
 
-        // order
-        printf("order: 0x%02x (byte 0)\n", lfn->order);
-
-        // name1
-        printf("name1:\n");
-        printf("sizeof(LfnEntry) = %zu\n", sizeof(LfnEntry));
-        printf("offsetof(name1) = %zu\n", offsetof(LfnEntry, name1));
-        for (int k = 0; k < 5; k++)
-        {
-            printf("  [%d]: 0x%04x ('%c') (bytes %d-%d)\n", k, lfn->name1[k], (char)lfn->name1[k], 1 + k * 2, 2 + k * 2);
-        }
-
-        // attr, type, checksum
-        printf("attr: 0x%02x (byte 11)\n", lfn->attr);
-        printf("type: 0x%02x (byte 12)\n", lfn->type);
-        printf("checksum: 0x%02x (byte 13)\n", lfn->checksum);
-
-        // name2
-        printf("name2:\n");
-        for (int k = 0; k < 6; k++)
-        {
-            printf("  [%d]: 0x%04x ('%c') (bytes %d-%d)\n", k, lfn->name2[k], (char)lfn->name2[k], 14 + k * 2, 15 + k * 2);
-        }
-
-        // zero
-        printf("zero: 0x%04x (bytes 26-27)\n", lfn->zero);
-
-        // name3
-        printf("name3:\n");
-        for (int k = 0; k < 2; k++)
-        {
-            printf("  [%d]: 0x%04x ('%c') (bytes %d-%d)\n", k, lfn->name3[k], (char)lfn->name3[k], 28 + k * 2, 29 + k * 2);
-        }
-        if (lfn->order & 0x40)
-            found_lfn = 1;
+        if (order & 0x40)
+            found_lfn = 1; // entry đầu (highest order)
 
         for (int j = 0; j < 5 && wpos < 250; j++)
-            if (lfn->name1[j] != 0xFFFF)
-                wname[wpos++] = lfn->name1[j];
+            if (name1[j] != 0xFFFF)
+                wname[wpos++] = name1[j];
         for (int j = 0; j < 6 && wpos < 250; j++)
-            if (lfn->name2[j] != 0xFFFF)
-                wname[wpos++] = lfn->name2[j];
+            if (name2[j] != 0xFFFF)
+                wname[wpos++] = name2[j];
         for (int j = 0; j < 2 && wpos < 250; j++)
-            if (lfn->name3[j] != 0xFFFF)
-                wname[wpos++] = lfn->name3[j];
+            if (name3[j] != 0xFFFF)
+                wname[wpos++] = name3[j];
     }
 
     if (!found_lfn)
         return 0;
+
     wname[wpos] = L'\0';
+    // Chuyển wchar -> multibyte (theo locale)
     wcstombs(long_name, wname, 256);
     return 1;
 }
 
-void recover_file_from_cluster(FILE *img, Fat32Info *info, uint32_t start_cluster, const char *filename, uint32_t size)
+// Khôi phục nội dung file từ cluster bắt đầu (giả sử không phân mảnh)
+void recover_file_from_cluster(FILE *img, Fat32Info *info, uint32_t start_cluster, const char *filename, uint32_t size, uint8_t *visited)
 {
     FILE *out = fopen(filename, "wb");
     if (!out)
@@ -163,13 +134,24 @@ void recover_file_from_cluster(FILE *img, Fat32Info *info, uint32_t start_cluste
     }
 
     uint8_t *buf = malloc(info->cluster_size_bytes);
+    if (!buf)
+    {
+        perror("malloc");
+        fclose(out);
+        return;
+    }
+
     uint32_t cluster = start_cluster;
     uint32_t remaining = size;
 
     while (remaining > 0 && cluster >= 2 && cluster < info->total_clusters)
     {
         uint32_t sector = cluster_to_sector(info, cluster);
-        fseek(img, sector * 512, SEEK_SET);
+        if (fseek(img, sector * 512, SEEK_SET) != 0)
+        {
+            printf("  Warning: fseek failed at cluster %u\n", cluster);
+            break;
+        }
         size_t read_sz = (remaining > info->cluster_size_bytes) ? info->cluster_size_bytes : remaining;
         if (fread(buf, 1, read_sz, img) != read_sz)
         {
@@ -178,36 +160,190 @@ void recover_file_from_cluster(FILE *img, Fat32Info *info, uint32_t start_cluste
         }
         fwrite(buf, 1, read_sz, out);
         remaining -= read_sz;
-        cluster++; // giả sử không phân mảnh
+        cluster++; // GIẢ SỬ file clusters là liên tiếp
     }
+
     free(buf);
     fclose(out);
-    printf("  Recovered: %s (%u bytes)\n", filename, size);
+    printf("    Recovered file: %s (%u bytes)\n", filename, size);
 }
 
-// === MAIN ===
+// Đệ quy quét một directory (SDET) bắt đầu tại start_cluster và khôi phục cấu trúc bên trong
+void recover_directory(FILE *img, Fat32Info *info, uint32_t start_cluster, const char *out_path, int depth, uint8_t *visited)
+{
+    if (depth > 32)
+    {
+        printf("    Max recursion depth reached at %s\n", out_path);
+        return;
+    }
+
+    #ifdef _WIN32
+    _mkdir(out_path);
+    #else
+    mkdir(out_path, 0755);
+    #endif
+
+    uint8_t *cluster_buf = malloc(info->cluster_size_bytes);
+    if (!cluster_buf)
+    {
+        perror("malloc");
+        return;
+    }
+
+    int entries_per_cluster = info->cluster_size_bytes / 32;
+    uint32_t cluster = start_cluster;
+
+    // Duyệt các cluster của directory. Giả sử directory clusters liêp tiếp nhau (không phân mảnh).
+    while (cluster >= 2 && cluster < info->total_clusters)
+    {
+        if (visited[cluster])
+        {
+            printf("      Cluster %u already visited, skip\n", cluster);
+            break;
+        }
+        visited[cluster] = 1;
+        uint32_t sector = cluster_to_sector(info, cluster);
+        if (fseek(img, sector * 512, SEEK_SET) != 0)
+        {
+            printf("    Warning: fseek failed reading dir cluster %u\n", cluster);
+            break;
+        }
+        if (fread(cluster_buf, 1, info->cluster_size_bytes, img) != info->cluster_size_bytes)
+        {
+            printf("    Warning: Read error at directory cluster %u (sector %u)\n", cluster, sector);
+            break;
+        }
+
+        // Duyệt từng entry trong cluster
+        for (int i = 0; i < entries_per_cluster; i++)
+        {
+            uint8_t *entry_raw = cluster_buf + i * 32;
+            DirEntry *entry = (DirEntry *)entry_raw;
+
+            // nếu entry trống => end of directory entries (theo FAT spec)
+            if (entry->name[0] == 0x00)
+            {
+                // không cần đọc các cluster tiếp theo (nếu có) vì thư mục kết thúc
+                free(cluster_buf);
+                return;
+            }
+
+            // Bỏ entry xóa
+            if (entry->name[0] == 0xE5)
+                continue;
+
+            // Bỏ các entry system/volume label nếu muốn
+            // Nếu LFN entry thì sẽ được xử lý trước khi entry 8.3 tương ứng
+            if (entry->attr == 0x0F)
+                continue;
+
+            // Lấy tên LFN nếu có (LFN nằm ngay phía trước entry 8.3)
+            char long_name[256] = "";
+            int has_lfn = 0;
+            if (i > 0 && cluster_buf[(i - 1) * 32 + 11] == 0x0F)
+            {
+                has_lfn = read_lfn(cluster_buf, i - 1, entries_per_cluster, long_name);
+            }
+
+            // Nếu entry là thư mục
+            if (entry->attr & 0x10)
+            {
+                // skip "." and ".."
+                char shortname[13];
+                print_short_name(entry->name, shortname);
+                if (strcmp(shortname, ".") == 0 || strcmp(shortname, "..") == 0)
+                    continue;
+
+                // quyết định tên thư mục cuối cùng: ưu tiên LFN nếu có
+                char final_name[256];
+                if (has_lfn && strlen(long_name) > 0)
+                    strncpy(final_name, long_name, sizeof(final_name));
+                else
+                    strncpy(final_name, shortname, sizeof(final_name));
+                final_name[sizeof(final_name)-1] = '\0';
+
+                // tạo đường dẫn out_path/final_name
+                char new_out[1024];
+                snprintf(new_out, sizeof(new_out), "%s/%s", out_path, final_name);
+
+                printf("    Directory: %s (cluster %u)\n", new_out, (entry->cluster_high << 16) | entry->cluster_low);
+
+                uint32_t dir_cluster = (entry->cluster_high << 16) | entry->cluster_low;
+                if (dir_cluster >= 2 && dir_cluster < info->total_clusters)
+                {
+                    // đệ quy quét thư mục con
+                    recover_directory(img, info, dir_cluster, new_out, depth + 1, visited);
+                }
+                else
+                {
+                    printf("      Warning: invalid cluster for directory %s\n", new_out);
+                }
+
+                continue;
+            }
+
+            // Nếu entry là file
+            if (entry->attr & 0x20)
+            {
+                char shortname[13];
+                print_short_name(entry->name, shortname);
+                char final_name[256];
+                if (has_lfn && strlen(long_name) > 0)
+                    strncpy(final_name, long_name, sizeof(final_name));
+                else
+                    strncpy(final_name, shortname, sizeof(final_name));
+                final_name[sizeof(final_name)-1] = '\0';
+
+                // chuẩn bị đường dẫn output file
+                char out_file[1024];
+                snprintf(out_file, sizeof(out_file), "%s/%s", out_path, final_name);
+
+                uint32_t file_cluster = (entry->cluster_high << 16) | entry->cluster_low;
+                printf("    File: %s (cluster %u, size %u)\n", out_file, file_cluster, entry->file_size);
+
+                if (file_cluster >= 2 && file_cluster < info->total_clusters)
+                {
+                    recover_file_from_cluster(img, info, file_cluster, out_file, entry->file_size, visited);
+                }
+                else
+                {
+                    printf("Warning: invalid cluster for file %s\n", out_file);
+                }
+                continue;
+            }
+
+        }
+
+        // move to next cluster of directory (GIẢ SỬ liên tiếp)
+        cluster++;
+    }
+
+    free(cluster_buf);
+}
+
 int main()
 {
     setlocale(LC_ALL, "");
 
-    FILE *img = fopen("case3_dir_cluster_err.img", "rb"); // Thay đổi tên file ảnh ổ đĩa nếu cần
+    const char *img_name = "case3_deleted_file_test.img";
+    FILE *img = fopen(img_name, "rb");
     if (!img)
     {
         perror("open img");
         return 1;
     }
 
-    // LẤY KÍCH THƯỚC FILE ẢNH
     fseek(img, 0, SEEK_END);
     long img_size = ftell(img);
     fseek(img, 0, SEEK_SET);
-    uint32_t total_sectors = img_size / 512;
+    uint32_t total_sectors = (uint32_t)(img_size / 512);
 
     Fat32Info info = {0};
     uint8_t boot[512];
     if (fread(boot, 1, 512, img) != 512)
     {
         printf("Error: Cannot read boot sector\n");
+        fclose(img);
         return 1;
     }
 
@@ -219,8 +355,6 @@ int main()
     info.root_dir_sectors = ((root_entries * 32) + 511) / 512;
     info.data_start_sector = info.reserved_sectors + (info.num_fats * info.sectors_per_fat) + info.root_dir_sectors;
     info.cluster_size_bytes = info.sectors_per_cluster * 512;
-
-    // TÍNH TỔNG SỐ CLUSTER TỪ KÍCH THƯỚC ẢNH
     info.total_clusters = (total_sectors - info.data_start_sector) / info.sectors_per_cluster + 2;
 
     printf("=== FAT32 INFO ===\n");
@@ -230,20 +364,25 @@ int main()
     printf("Data start: sector %u\n", info.data_start_sector);
     printf("Total clusters: %u\n\n", info.total_clusters);
 
-    system("mkdir -p recovered");
+    // tạo thư mục recovered
+    system("mkdir recovered");
 
+    // Duyệt các cluster tìm SDET (cluster có entry 0 = "." và entry 1 = "..")
     uint8_t *cluster_buf = malloc(info.cluster_size_bytes);
     if (!cluster_buf)
     {
         perror("malloc");
+        fclose(img);
         return 1;
     }
     int entries_per_cluster = info.cluster_size_bytes / 32;
 
-    printf("Scanning clusters 2 to %u...\n", info.total_clusters - 1);
+    printf("Scanning clusters 2 to %u for SDET...\n", info.total_clusters - 1);
+    uint8_t *visited = calloc(info.total_clusters, 1);
 
     for (uint32_t cluster = 2; cluster < info.total_clusters; cluster++)
     {
+        if (visited[cluster]) continue;
         uint32_t sector = cluster_to_sector(&info, cluster);
         if (sector >= total_sectors)
         {
@@ -251,99 +390,46 @@ int main()
             break;
         }
 
-        fseek(img, sector * 512, SEEK_SET);
+        if (fseek(img, sector * 512, SEEK_SET) != 0)
+        {
+            printf("Warning: fseek error at cluster %u\n", cluster);
+            break;
+        }
+
         if (fread(cluster_buf, 1, info.cluster_size_bytes, img) != info.cluster_size_bytes)
         {
             printf("Warning: Read error at cluster %u (sector %u)\n", cluster, sector);
             break;
         }
 
-        // TÌM SIGNATURE DIRECTORY: Entry 0 = ".", Entry 1 = ".."
+        // Kiểm tra signature directory: entry 0 = ".", entry 1 = ".."
         DirEntry *entry0 = (DirEntry *)cluster_buf;
         DirEntry *entry1 = (DirEntry *)(cluster_buf + 32);
-        char dot_name[13];
-        char dotdot_name[13];
+        char dot_name[13], dotdot_name[13];
         print_short_name(entry0->name, dot_name);
         print_short_name(entry1->name, dotdot_name);
 
         if (entry0->attr == 0x10 && strcmp(dot_name, ".") == 0 &&
             entry1->attr == 0x10 && strcmp(dotdot_name, "..") == 0)
         {
-            printf("Found potential SDET cluster %u (signature . and .. found)\n", cluster);
+            printf("Found potential SDET cluster %u\n", cluster);
+            // tạo thư mục chứa SDET này
+            char dir_path[1024];
+            snprintf(dir_path, sizeof(dir_path), "recovered/Dir_%u", cluster);
+            #ifdef _WIN32
+            _mkdir(dir_path);
+            #else
+            mkdir(dir_path, 0755);
+            #endif
 
-            // THÊM DEBUG: In hex of first 128 bytes of directory cluster
-            printf("  Directory cluster hex debug (first 128 bytes):\n");
-            for (int k = 0; k < 128; k++)
-            {
-                printf("%02x ", cluster_buf[k]);
-                if ((k + 1) % 16 == 0)
-                    printf("\n");
-            }
-            printf("\n");
-
-            // THÊM DEBUG: In tất cả entry trong directory
-            int valid_entries = 0;
-            for (int i = 2; i < entries_per_cluster; i++)
-            {
-                uint8_t *entry_raw = cluster_buf + i * 32;
-                DirEntry *entry = (DirEntry *)entry_raw;
-                if (is_valid_name(entry->name))
-                {
-                    char entry_name[13];
-                    print_short_name(entry->name, entry_name);
-                    printf("  Entry %d: Name '%s', Attr 0x%02x, Cluster %u, Size %u\n", i, entry_name, entry->attr, (entry->cluster_high << 16) | entry->cluster_low, entry->file_size);
-                    valid_entries++;
-                }
-            }
-            printf("  Found %d valid entries in this directory cluster\n", valid_entries);
-
-            // Xử lý entry file
-            for (int i = 2; i < entries_per_cluster; i++)
-            {
-                uint8_t *entry_raw = cluster_buf + i * 32;
-
-                char long_name[256] = "";
-                int has_lfn = 0;
-                // THÊM DEBUG: Kiểm tra LFN
-                if (i > 2 && (cluster_buf[(i - 1) * 32 + 11] == 0x0F))
-                {
-                    has_lfn = read_lfn(cluster_buf, i - 1, entries_per_cluster, long_name);
-                    if (has_lfn)
-                        printf("  - LFN found for entry %d: '%s'\n", i, long_name);
-                }
-
-                DirEntry *entry = (DirEntry *)entry_raw;
-                if (!is_valid_name(entry->name))
-                    continue;
-                if (entry->attr != 0x20)
-                {
-                    printf("  - Skip entry %d: Not a file (attr 0x%02x)\n", i, entry->attr);
-                    continue;
-                }
-
-                char short_name[13];
-                print_short_name(entry->name, short_name);
-                char final_name[256];
-                strcpy(final_name, has_lfn && strlen(long_name) ? long_name : short_name);
-
-                char dir_path[1024];
-                snprintf(dir_path, sizeof(dir_path), "recovered/Dir_%u", cluster);
-                char mkdir_cmd[1100];
-                snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\"", dir_path);
-                system(mkdir_cmd);
-
-                char out_path[1024];
-                snprintf(out_path, sizeof(out_path), "%s/%s", dir_path, final_name);
-
-                uint32_t file_cluster = (entry->cluster_high << 16) | entry->cluster_low;
-                printf("  - Recovering file '%s' from cluster %u, size %u\n", final_name, file_cluster, entry->file_size);
-                recover_file_from_cluster(img, &info, file_cluster, out_path, entry->file_size);
-            }
+            // gọi recover_directory trên cluster này (đệ quy)
+            recover_directory(img, &info, cluster, dir_path, 0, visited);
         }
     }
 
     free(cluster_buf);
     fclose(img);
+
     printf("\nDone! Check 'recovered/' folder.\n");
     return 0;
 }
