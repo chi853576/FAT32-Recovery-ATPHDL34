@@ -1,15 +1,22 @@
 // File: fat32_recovery_case1.c
-// Phiên bản: Root Access Version + Custom Mount Point + Unmount Option
-// Cách chạy:
-// 1. gcc fat32_recovery_case1.c -o recovery_tool
-// 2. sudo ./recovery_tool ../../base_images/fat32_partition_errA.img  <-- QUAN TRỌNG: Phải chạy bằng sudo
-// 3. Thuc hien cac chuc nang theo menu
+// Phien ban: Cross-Platform (Windows & Linux Compatible)
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <unistd.h> // Thu vien de dung geteuid()
+
+// --- PHAN BIET HE DIEU HANH ---
+#ifdef _WIN32
+#include <io.h>
+#include <windows.h>
+#define F_OK 0
+#define access _access
+#else
+#include <unistd.h>
+#include <sys/types.h>
+#endif
+// ------------------------------
 
 // ==========================================================
 // ĐỊNH NGHĨA VÀ CẤU TRÚC
@@ -34,6 +41,23 @@ typedef struct
     uint32_t total_sectors;
 } PartitionEntry;
 #pragma pack(pop)
+
+// ==========================================================
+// HAM KIEM TRA QUYEN (Cross-platform)
+// ==========================================================
+int is_admin_or_root()
+{
+#ifdef _WIN32
+    // Tren Windows, chung ta tam thoi bo qua check Admin phuc tap
+    // Gia dinh nguoi dung chay CMD du quyen de doc/ghi file
+    return 1;
+#else
+    // Tren Linux, check root
+    if (geteuid() != 0)
+        return 0;
+    return 1;
+#endif
+}
 
 // ==========================================================
 // Chuc nang 1: Xem 64 bytes
@@ -297,6 +321,16 @@ void run_recovery(const char *filename)
 // ==========================================================
 void mount_image(const char *filename)
 {
+#ifdef _WIN32
+    printf("\n[WINDOWS DETECTED] ----------------------------------\n");
+    printf("Chuc nang Mount tu dong bang lenh 'mount' cua Linux khong kha dung tren Windows CMD.\n");
+    printf("De kiem tra ket qua phuc hoi, ban vui long:\n");
+    printf("1. Su dung tool OSFMount (nhu ban da tim hieu).\n");
+    printf("2. Mount file '%s' bang OSFMount.\n", filename);
+    printf("3. Mo o dia ao vua mount de xem du lieu.\n");
+    printf("-----------------------------------------------------\n");
+    return;
+#else
     // Kiem tra xem da mount chua
     if (is_mounted)
     {
@@ -377,7 +411,7 @@ void mount_image(const char *filename)
 
         printf("\n[HUONG DAN] De xem noi dung file, hay dung lenh cat:\n");
         printf("   cat %s/<ten_file>\n", current_mount_point);
-        printf("Vi du: cat %s/nhat_ky.txt\n", current_mount_point);
+        printf("Vi du: cat %s/test.txt\n", current_mount_point);
 
         printf("-----------------------------------------------\n");
     }
@@ -388,6 +422,7 @@ void mount_image(const char *filename)
         current_mount_point[0] = '\0';
         is_mounted = 0;
     }
+#endif
 }
 
 // ==========================================================
@@ -395,6 +430,10 @@ void mount_image(const char *filename)
 // ==========================================================
 void unmount_folder()
 {
+#ifdef _WIN32
+    printf("\n[WINDOWS] Khong can unmount vi chuc nang nay chua duoc thuc thi.\n");
+    return;
+#else
     printf("\n--- [Chuc nang 6] Unmount Folder ---\n");
 
     if (is_mounted == 0)
@@ -427,6 +466,7 @@ void unmount_folder()
     {
         printf("[Loi] Khong the unmount. Co the ban dang mo thu muc do o terminal khac?\n");
     }
+#endif
 }
 
 // ==========================================================
@@ -435,7 +475,7 @@ void unmount_folder()
 int main(int argc, char *argv[])
 {
     // BUOC KIEM TRA QUYEN ROOT (BAT BUOC)
-    if (geteuid() != 0)
+    if (!is_admin_or_root())
     {
         printf("Loi: Chuong trinh nay can phai chay bang quyen root de thuc hien lenh mount.\n");
         printf("Vui long chay lai bang lenh: sudo %s <ten-file>\n", argv[0]);
@@ -444,8 +484,8 @@ int main(int argc, char *argv[])
 
     if (argc != 2)
     {
-        printf("Su dung: sudo %s <ten-file-anh>\n", argv[0]);
-        printf("Vi du: sudo %s ../../base_images/case1_err_A.img\n", argv[0]);
+        printf("Su dung: %s <ten-file-anh>\n", argv[0]);
+        printf("Vi du: %s ../../base_images/case1_err_A.img\n", argv[0]);
         return 1;
     }
 
@@ -455,7 +495,7 @@ int main(int argc, char *argv[])
     while (1)
     {
         printf("\n==========================================\n");
-        printf("CONG CU PHUC HOI FAT32 (LINUX - ROOT MODE)\n");
+        printf("CONG CU PHUC HOI FAT32 (CROSS-PLATFORM)\n");
         printf("File anh: %s\n", disk_image);
         if (is_mounted)
         {
@@ -466,7 +506,7 @@ int main(int argc, char *argv[])
         printf("2. Tao backup (Ghi Sector 0 vao cuoi file)\n");
         printf("3. Ghi de 64 bytes (Lam hong Partition Table)\n");
         printf("4. CHAY PHUC HOI (Case A -> Case B)\n");
-        printf("5. Mount file anh (Nhap ten folder)\n");
+        printf("5. Mount file anh (OSFMount needed on Windows)\n");
         printf("6. Unmount folder (Go bo mount)\n");
         printf("0. Thoat\n");
         printf("------------------------------------------\n");
